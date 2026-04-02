@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignAI — Sign Language Avatar</title>
+    <meta name="description" content="Convert English text or voice to animated sign language gestures">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0e1a;
+            --surface: rgba(18, 24, 42, 0.85);
+            --border: rgba(99, 102, 241, 0.15);
+            --primary: #818cf8;
+            --primary-glow: #6366f1;
+            --accent: #a78bfa;
+            --success: #34d399;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --danger: #f87171;
+            --radius: 16px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        /* Animated background */
+        .bg-glow {
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background:
+                radial-gradient(ellipse 600px 400px at 20% 20%, rgba(99,102,241,0.12), transparent),
+                radial-gradient(ellipse 500px 500px at 80% 80%, rgba(167,139,250,0.08), transparent);
+            animation: bgPulse 8s ease-in-out infinite alternate;
+        }
+        @keyframes bgPulse {
+            0%   { opacity: .7; transform: scale(1); }
+            100% { opacity: 1;  transform: scale(1.05); }
+        }
+
+        .app { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+
+        /* Header */
+        header {
+            display: flex; align-items: center; gap: 14px;
+            padding: 1rem 0 1.5rem;
+        }
+        .logo {
+            width: 48px; height: 48px; border-radius: 14px;
+            background: linear-gradient(135deg, var(--primary-glow), var(--accent));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.6rem; box-shadow: 0 4px 20px rgba(99,102,241,0.35);
+        }
+        header h1 {
+            font-size: 1.6rem; font-weight: 700;
+            background: linear-gradient(90deg, var(--text), var(--primary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        header p { color: var(--text-muted); font-size: .85rem; margin-top: 2px; }
+
+        /* Main layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        /* Card base */
+        .card {
+            background: var(--surface);
+            backdrop-filter: blur(24px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,.25);
+        }
+
+        /* Avatar section */
+        .avatar-section { text-align: center; }
+        #avatar-canvas {
+            width: 100%; max-width: 400px; height: 420px;
+            border-radius: 14px;
+            background: linear-gradient(180deg, #0f1629, #131b32);
+            border: 1px solid var(--border);
+        }
+        .sign-label {
+            margin-top: .75rem; font-size: 1.5rem; font-weight: 700;
+            color: var(--primary); min-height: 2rem;
+            transition: all .3s;
+        }
+
+        /* Gloss chips */
+        .gloss-row {
+            display: flex; flex-wrap: wrap; gap: .5rem;
+            justify-content: center; min-height: 42px;
+            margin-top: .75rem;
+        }
+        .gloss-chip {
+            padding: 6px 14px; border-radius: 20px; font-size: .85rem; font-weight: 600;
+            background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2);
+            color: var(--text-muted); transition: all .3s;
+        }
+        .gloss-chip.active {
+            background: var(--primary-glow); color: #fff;
+            border-color: var(--primary); box-shadow: 0 0 16px rgba(99,102,241,0.4);
+            transform: scale(1.1);
+        }
+        .gloss-chip.done { color: var(--success); border-color: rgba(52,211,153,0.3); }
+
+        /* Input section */
+        .input-section {
+            display: flex; gap: .75rem; align-items: stretch;
+        }
+        #text-input {
+            flex: 1; padding: 14px 18px; border-radius: 12px;
+            border: 1px solid var(--border); background: rgba(15,22,41,0.8);
+            color: var(--text); font-size: 1rem; font-family: inherit;
+            outline: none; transition: border-color .3s;
+        }
+        #text-input:focus { border-color: var(--primary); }
+        #text-input::placeholder { color: var(--text-muted); }
+
+        .btn {
+            padding: 14px 20px; border: none; border-radius: 12px;
+            font-size: 1rem; font-weight: 600; cursor: pointer;
+            transition: all .25s; font-family: inherit;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-glow), var(--accent));
+            color: #fff; box-shadow: 0 4px 16px rgba(99,102,241,0.3);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(99,102,241,0.45); }
+        .btn-mic {
+            background: rgba(99,102,241,0.12); color: var(--primary);
+            border: 1px solid rgba(99,102,241,0.25); font-size: 1.3rem; padding: 14px 16px;
+        }
+        .btn-mic:hover { background: rgba(99,102,241,0.2); }
+        .btn-mic.recording {
+            background: rgba(248,113,113,0.2); color: var(--danger);
+            border-color: var(--danger); animation: micPulse 1s infinite;
+        }
+        @keyframes micPulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.3); }
+            50%     { box-shadow: 0 0 0 10px rgba(248,113,113,0); }
+        }
+        .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+        /* Status */
+        .status-bar {
+            text-align: center; color: var(--text-muted); font-size: .85rem;
+            padding: .5rem; min-height: 1.5rem;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center; padding: 1.5rem 0; color: var(--text-muted); font-size: .8rem;
+        }
+        footer a { color: var(--primary); text-decoration: none; }
+
+        @media (max-width: 600px) {
+            .app { padding: 1rem; }
+            header h1 { font-size: 1.3rem; }
+            .input-section { flex-wrap: wrap; }
+            #text-input { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-glow"></div>
+    <div class="app">
+        <header>
+            <div class="logo">🤟</div>
+            <div>
+                <h1>SignAI</h1>
+                <p>English → Sign Language Avatar</p>
+            </div>
+        </header>
+
+        <main class="main-grid">
+            <div class="card avatar-section">
+                <canvas id="avatar-canvas" width="400" height="420"></canvas>
+                <div class="sign-label" id="sign-label">Ready</div>
+                <div class="gloss-row" id="gloss-row"></div>
+            </div>
+
+            <div class="card">
+                <div class="input-section">
+                    <input type="text" id="text-input" placeholder="Type an English sentence..." autocomplete="off">
+                    <button class="btn btn-mic" id="mic-btn" title="Voice input"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+                    <button class="btn btn-primary" id="send-btn">Translate</button>
+                </div>
+                <div class="status-bar" id="status-bar"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by ISL Gloss Engine &middot; <a href="/api/vocabulary" target="_blank">View vocabulary</a></p>
+        </footer>
+    </div>
+
+<script>
+/* =========================================================
+   SIGN POSE DEFINITIONS
+   Each pose: le/lw = left elbow/wrist, re/rw = right
+   Coordinates on a 400x420 canvas
+   ========================================================= */
+const P = {
+    // Idle / default
+    _IDLE:  { le:[112,235], lw:[118,310], re:[288,235], rw:[282,310], lh:'relaxed', rh:'relaxed' },
+    // Pronouns
+    I:      { le:[112,235], lw:[118,310], re:[240,195], rw:[205,190], lh:'relaxed', rh:'point' },
+    YOU:    { le:[112,235], lw:[118,310], re:[280,175], rw:[320,135], lh:'relaxed', rh:'point' },
+    HE:     { le:[112,235], lw:[118,310], re:[300,175], rw:[340,155], lh:'relaxed', rh:'point' },
+    SHE:    { le:[112,235], lw:[118,310], re:[300,175], rw:[340,155], lh:'relaxed', rh:'point' },
+    WE:     { le:[155,200], lw:[175,185], re:[245,200], rw:[225,185], lh:'flat',    rh:'flat' },
+    THEY:   { le:[100,185], lw:[60,160],  re:[300,185], rw:[340,160], lh:'point',   rh:'point' },
+    IT:     { le:[112,235], lw:[118,310], re:[280,190], rw:[310,170], lh:'relaxed', rh:'point' },
+    // Verbs
+    LIKE:   { le:[112,235], lw:[118,310], re:[245,200], rw:[215,195], lh:'relaxed', rh:'open' },
+    GO:     { le:[130,200], lw:[110,175], re:[270,200], rw:[290,175], lh:'point',   rh:'point' },
+    COME:   { le:[112,235], lw:[118,310], re:[260,190], rw:[230,200], lh:'relaxed', rh:'open' },
+    EAT:    { le:[112,235], lw:[118,310], re:[248,158], rw:[218,105], lh:'relaxed', rh:'pinch' },
+    DRINK:  { le:[112,235], lw:[118,310], re:[245,160], rw:[215,108], lh:'relaxed', rh:'cup' },
+    WANT:   { le:[145,200], lw:[135,220], re:[255,200], rw:[265,220], lh:'claw',    rh:'claw' },
+    NEED:   { le:[112,235], lw:[118,310], re:[260,200], rw:[270,220], lh:'relaxed', rh:'hook' },
+    HAVE:   { le:[158,190], lw:[178,200], re:[242,190], rw:[222,200], lh:'flat',    rh:'flat' },
+    KNOW:   { le:[112,235], lw:[118,310], re:[252,125], rw:[242,82],  lh:'relaxed', rh:'flat' },
+    THINK:  { le:[112,235], lw:[118,310], re:[248,122], rw:[225,72],  lh:'relaxed', rh:'point' },
+    HELP:   { le:[162,215], lw:[188,205], re:[238,205], rw:[208,195], lh:'open',    rh:'fist' },
+    SEE:    { le:[112,235], lw:[118,310], re:[252,132], rw:[242,88],  lh:'relaxed', rh:'v' },
+    UNDERSTAND:{ le:[112,235], lw:[118,310], re:[248,125], rw:[235,70], lh:'relaxed', rh:'point' },
+    LEARN:  { le:[158,215], lw:[175,205], re:[248,155], rw:[238,100], lh:'open',    rh:'claw' },
+    STUDY:  { le:[158,215], lw:[175,205], re:[248,155], rw:[238,100], lh:'open',    rh:'open' },
+    PLAY:   { le:[135,195], lw:[115,170], re:[265,195], rw:[285,170], lh:'open',    rh:'open' },
+    MEET:   { le:[160,200], lw:[185,195], re:[240,200], rw:[215,195], lh:'point',   rh:'point' },
+    GIVE:   { le:[112,235], lw:[118,310], re:[265,198], rw:[295,182], lh:'relaxed', rh:'open' },
+    TAKE:   { le:[112,235], lw:[118,310], re:[265,198], rw:[235,205], lh:'relaxed', rh:'claw' },
+    SLEEP:  { le:[112,235], lw:[118,310], re:[245,148], rw:[228,95],  lh:'relaxed', rh:'open' },
+    SPEAK:  { le:[112,235], lw:[118,310], re:[252,165], rw:[230,115], lh:'relaxed', rh:'open' },
+    WRITE:  { le:[158,210], lw:[175,200], re:[242,210], rw:[210,200], lh:'open',    rh:'pinch' },
+    READ:   { le:[158,215], lw:[175,210], re:[242,215], rw:[225,210], lh:'open',    rh:'open' },
+    COOK:   { le:[155,210], lw:[170,205], re:[245,210], rw:[230,205], lh:'open',    rh:'flat' },
+    BUY:    { le:[158,210], lw:[175,200], re:[242,200], rw:[270,180], lh:'open',    rh:'flat' },
+    SELL:   { le:[155,200], lw:[175,195], re:[245,200], rw:[265,180], lh:'flat',    rh:'flat' },
+    CALL:   { le:[112,235], lw:[118,310], re:[250,155], rw:[235,95],  lh:'relaxed', rh:'open' },
+    WAIT:   { le:[140,200], lw:[145,215], re:[260,200], rw:[255,215], lh:'open',    rh:'open' },
+    LIVE:   { le:[155,200], lw:[170,210], re:[245,200], rw:[230,210], lh:'flat',    rh:'flat' },
+    FORGET: { le:[112,235], lw:[118,310], re:[248,128], rw:[270,100], lh:'relaxed', rh:'open' },
+    LOVE:   { le:[172,200], lw:[212,215], re:[228,200], rw:[188,215], lh:'fist',    rh:'fist' },
+    PRAY:   { le:[165,195], lw:[195,190], re:[235,195], rw:[205,190], lh:'open',    rh:'open' },
+    WALK:   { le:[140,210], lw:[130,240], re:[260,210], rw:[270,240], lh:'flat',    rh:'flat' },
+    RUN:    { le:[125,195], lw:[100,170], re:[275,195], rw:[300,170], lh:'fist',    rh:'fist' },
+    SIT:    { le:[112,235], lw:[118,310], re:[260,205], rw:[255,225], lh:'relaxed', rh:'hook' },
+    STAND:  { le:[112,235], lw:[118,310], re:[250,208], rw:[240,210], lh:'relaxed', rh:'flat' },
+    OPEN:   { le:[150,195], lw:[125,170], re:[250,195], rw:[275,170], lh:'open',    rh:'open' },
+    CLOSE:  { le:[165,200], lw:[190,200], re:[235,200], rw:[210,200], lh:'flat',    rh:'flat' },
+    WASH:   { le:[162,205], lw:[185,200], re:[238,205], rw:[215,200], lh:'fist',    rh:'fist' },
+    HEAR:   { le:[112,235], lw:[118,310], re:[255,145], rw:[255,95],  lh:'relaxed', rh:'cup' },
+    FEEL:   { le:[112,235], lw:[118,310], re:[238,198], rw:[215,200], lh:'relaxed', rh:'open' },
+    REMEMBER:{ le:[112,235], lw:[118,310], re:[248,130], rw:[238,80], lh:'relaxed', rh:'flat' },
+    FINISH: { le:[135,190], lw:[115,165], re:[265,190], rw:[285,165], lh:'open',    rh:'open' },
+    START:  { le:[160,205], lw:[185,200], re:[240,205], rw:[215,200], lh:'open',    rh:'point' },
+    TELL:   { le:[112,235], lw:[118,310], re:[250,168], rw:[278,145], lh:'relaxed', rh:'point' },
+    ASK:    { le:[112,235], lw:[118,310], re:[258,185], rw:[280,160], lh:'relaxed', rh:'point' },
+    // Nouns
+    FOOD:   { le:[112,235], lw:[118,310], re:[248,158], rw:[218,105], lh:'relaxed', rh:'pinch' },
+    WATER:  { le:[112,235], lw:[118,310], re:[245,160], rw:[215,108], lh:'relaxed', rh:'open' },
+    SCHOOL: { le:[168,205], lw:[192,200], re:[232,205], rw:[208,200], lh:'open',    rh:'open' },
+    HOME:   { le:[112,235], lw:[118,310], re:[242,135], rw:[228,92],  lh:'relaxed', rh:'flat' },
+    NAME:   { le:[160,205], lw:[185,200], re:[240,205], rw:[215,200], lh:'flat',    rh:'flat' },
+    BOOK:   { le:[162,215], lw:[178,195], re:[238,215], rw:[222,195], lh:'open',    rh:'open' },
+    MONEY:  { le:[158,210], lw:[178,200], re:[242,210], rw:[222,200], lh:'open',    rh:'flat' },
+    WORK:   { le:[155,210], lw:[175,205], re:[245,210], rw:[225,205], lh:'fist',    rh:'fist' },
+    FAMILY: { le:[148,195], lw:[165,185], re:[252,195], rw:[235,185], lh:'open',    rh:'open' },
+    FRIEND: { le:[162,205], lw:[192,200], re:[238,205], rw:[208,200], lh:'hook',    rh:'hook' },
+    DOCTOR: { le:[158,210], lw:[178,200], re:[248,165], rw:[228,165], lh:'open',    rh:'flat' },
+    MOTHER: { le:[112,235], lw:[118,310], re:[242,142], rw:[218,108], lh:'relaxed', rh:'open' },
+    FATHER: { le:[112,235], lw:[118,310], re:[242,125], rw:[225,72],  lh:'relaxed', rh:'open' },
+    CHILD:  { le:[112,235], lw:[118,310], re:[258,210], rw:[260,235], lh:'relaxed', rh:'flat' },
+    TEACHER:{ le:[148,155], lw:[125,135], re:[252,155], rw:[275,135], lh:'open',    rh:'open' },
+    STUDENT:{ le:[158,215], lw:[175,205], re:[248,155], rw:[238,100], lh:'open',    rh:'claw' },
+    // Adjectives
+    GOOD:   { le:[112,235], lw:[118,310], re:[252,172], rw:[282,172], lh:'relaxed', rh:'flat' },
+    BAD:    { le:[112,235], lw:[118,310], re:[252,172], rw:[272,222], lh:'relaxed', rh:'flat' },
+    BIG:    { le:[100,185], lw:[60,175],  re:[300,185], rw:[340,175], lh:'open',    rh:'open' },
+    SMALL:  { le:[172,205], lw:[188,205], re:[228,205], rw:[212,205], lh:'flat',    rh:'flat' },
+    HAPPY:  { le:[158,205], lw:[168,178], re:[242,205], rw:[232,178], lh:'open',    rh:'open' },
+    SAD:    { le:[158,185], lw:[162,232], re:[242,185], rw:[238,232], lh:'open',    rh:'open' },
+    SICK:   { le:[112,235], lw:[118,310], re:[248,132], rw:[225,82],  lh:'relaxed', rh:'open' },
+    TIRED:  { le:[158,198], lw:[168,235], re:[242,198], rw:[232,235], lh:'open',    rh:'open' },
+    HUNGRY: { le:[112,235], lw:[118,310], re:[242,195], rw:[222,252], lh:'relaxed', rh:'claw' },
+    HOT:    { le:[112,235], lw:[118,310], re:[248,155], rw:[275,135], lh:'relaxed', rh:'claw' },
+    COLD:   { le:[148,200], lw:[155,215], re:[252,200], rw:[245,215], lh:'fist',    rh:'fist' },
+    BEAUTIFUL:{ le:[148,180], lw:[175,155], re:[252,180], rw:[225,155], lh:'open',  rh:'open' },
+    ANGRY:  { le:[148,188], lw:[155,165], re:[252,188], rw:[245,165], lh:'claw',    rh:'claw' },
+    SCARED: { le:[145,195], lw:[148,175], re:[255,195], rw:[252,175], lh:'open',    rh:'open' },
+    STRONG: { le:[120,185], lw:[105,165], re:[280,185], rw:[295,165], lh:'fist',    rh:'fist' },
+    // Question words
+    WHAT:   { le:[132,205], lw:[112,205], re:[268,205], rw:[288,205], lh:'open',    rh:'open' },
+    WHERE:  { le:[112,235], lw:[118,310], re:[272,175], rw:[302,138], lh:'relaxed', rh:'point' },
+    WHO:    { le:[112,235], lw:[118,310], re:[242,142], rw:[218,102], lh:'relaxed', rh:'point' },
+    WHEN:   { le:[152,200], lw:[168,200], re:[248,200], rw:[232,200], lh:'point',   rh:'point' },
+    WHY:    { le:[112,235], lw:[118,310], re:[248,128], rw:[232,78],  lh:'relaxed', rh:'open' },
+    HOW:    { le:[152,200], lw:[158,205], re:[248,200], rw:[242,205], lh:'fist',    rh:'fist' },
+    // Negation
+    NO:     { le:[112,235], lw:[118,310], re:[272,175], rw:[288,148], lh:'relaxed', rh:'pinch' },
+    NOT:    { le:[112,235], lw:[118,310], re:[258,158], rw:[232,118], lh:'relaxed', rh:'fist' },
+    // Time
+    TODAY:  { le:[142,200], lw:[152,218], re:[258,200], rw:[248,218], lh:'open',    rh:'open' },
+    TOMORROW:{ le:[112,235], lw:[118,310], re:[258,148], rw:[282,112], lh:'relaxed', rh:'fist' },
+    YESTERDAY:{ le:[112,235], lw:[118,310], re:[242,142], rw:[222,102], lh:'relaxed', rh:'fist' },
+    NOW:    { le:[142,200], lw:[152,215], re:[258,200], rw:[248,215], lh:'open',    rh:'open' },
+    LATER:  { le:[112,235], lw:[118,310], re:[260,195], rw:[282,175], lh:'relaxed', rh:'flat' },
+    ALWAYS: { le:[148,200], lw:[158,205], re:[252,195], rw:[272,175], lh:'relaxed', rh:'point' },
+    NEVER:  { le:[112,235], lw:[118,310], re:[265,195], rw:[285,215], lh:'relaxed', rh:'open' },
+
+    // --- CUSTOM POSES FROM USER VIDEOS ---
+    QUIET: { le:[164,229], lw:[156,307], re:[227,215], rw:[204,145], lh:'relaxed', rh:'relaxed' },
+    HAPPY: { le:[153,230], lw:[158,181], re:[235,234], rw:[230,164], lh:'relaxed', rh:'relaxed' },
+    SAD: { le:[153,256], lw:[154,340], re:[233,246], rw:[204,254], lh:'relaxed', rh:'relaxed' },
+    BEAUTIFUL: { le:[153,256], lw:[153,340], re:[229,241], rw:[211,167], lh:'relaxed', rh:'relaxed' },
+    UGLY: { le:[156,260], lw:[158,344], re:[231,244], rw:[218,183], lh:'relaxed', rh:'relaxed' },
+    DEAF: { le:[155,254], lw:[157,339], re:[227,247], rw:[200,235], lh:'relaxed', rh:'open' },
+    BLIND: { le:[155,251], lw:[155,338], re:[216,245], rw:[192,162], lh:'relaxed', rh:'open' },
+};
+
+/* =========================================================
+   AVATAR RENDERER
+   ========================================================= */
+class SignAvatar {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.w = canvas.width;
+        this.h = canvas.height;
+
+        // Body fixed points
+        this.headCenter = [200, 78];
+        this.headR = 36;
+        this.neckBase = [200, 132];
+        this.lShoulder = [140, 155];
+        this.rShoulder = [260, 155];
+        this.waist = [200, 310];
+
+        // Current animated joint positions
+        this.joints = { ...P._IDLE };
+        this.target = { ...P._IDLE };
+        this.speed = 0.07;
+
+        this._animating = true;
+        this._loop();
+    }
+
+    setPose(name) {
+        const pose = P[name] || P._IDLE;
+        this.target = { ...pose };
+    }
+
+    _lerp(a, b, t) { return a + (b - a) * t; }
+
+    _lerpArr(a, b, t) { return [this._lerp(a[0],b[0],t), this._lerp(a[1],b[1],t)]; }
+
+    _update() {
+        const t = this.speed;
+        this.joints.le = this._lerpArr(this.joints.le, this.target.le, t);
+        this.joints.lw = this._lerpArr(this.joints.lw, this.target.lw, t);
+        this.joints.re = this._lerpArr(this.joints.re, this.target.re, t);
+        this.joints.rw = this._lerpArr(this.joints.rw, this.target.rw, t);
+        this.joints.lh = this.target.lh;
+        this.joints.rh = this.target.rh;
+    }
+
+    _loop() {
+        if (!this._animating) return;
+        this._update();
+        this._draw();
+        requestAnimationFrame(() => this._loop());
+    }
+
+    _draw() {
+        const ctx = this.ctx;
+        ctx.clearRect(0, 0, this.w, this.h);
+
+        const skin = '#D4A574';
+        const skinDark = '#C4956A';
+        const shirt = '#2D3566';
+        const shirtLight = '#3A4580';
+
+        // Body / torso
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(this.lShoulder[0]-8, this.lShoulder[1]);
+        ctx.quadraticCurveTo(200, this.lShoulder[1]-10, this.rShoulder[0]+8, this.rShoulder[1]);
+        ctx.lineTo(this.rShoulder[0]+20, this.waist[1]);
+        ctx.quadraticCurveTo(200, this.waist[1]+15, this.lShoulder[0]-20, this.waist[1]);
+        ctx.closePath();
+        const tGrad = ctx.createLinearGradient(130, 155, 270, 310);
+        tGrad.addColorStop(0, shirtLight);
+        tGrad.addColorStop(1, shirt);
+        ctx.fillStyle = tGrad;
+        ctx.fill();
+        ctx.restore();
+
+        // Collar / neckline
+        ctx.beginPath();
+        ctx.moveTo(175, 142);
+        ctx.quadraticCurveTo(200, 158, 225, 142);
+        ctx.strokeStyle = '#252D52';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Arms
+        this._drawArm(ctx, this.lShoulder, this.joints.le, this.joints.lw, shirt, skin);
+        this._drawArm(ctx, this.rShoulder, this.joints.re, this.joints.rw, shirt, skin);
+
+        // Hands
+        this._drawHand(ctx, this.joints.lw, this.joints.lh, skin, skinDark);
+        this._drawHand(ctx, this.joints.rw, this.joints.rh, skin, skinDark);
+
+        // Neck
+        ctx.beginPath();
+        ctx.moveTo(188, 118);
+        ctx.lineTo(212, 118);
+        ctx.lineTo(215, 142);
+        ctx.lineTo(185, 142);
+        ctx.closePath();
+        ctx.fillStyle = skin;
+        ctx.fill();
+
+        // Head
+        ctx.beginPath();
+        ctx.arc(this.headCenter[0], this.headCenter[1], this.headR, 0, Math.PI*2);
+        const hGrad = ctx.createRadialGradient(195, 70, 5, 200, 78, 38);
+        hGrad.addColorStop(0, '#E0B88A');
+        hGrad.addColorStop(1, skin);
+        ctx.fillStyle = hGrad;
+        ctx.fill();
+
+        // Hair
+        ctx.beginPath();
+        ctx.ellipse(200, 55, 40, 22, 0, Math.PI, 0);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(165, 72, 8, 20, 0.3, 0, Math.PI*2);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(235, 72, 8, 20, -0.3, 0, Math.PI*2);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fill();
+
+        // Eyes
+        ctx.fillStyle = '#1a1a2e';
+        ctx.beginPath(); ctx.ellipse(186, 78, 4, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(214, 78, 4, 5, 0, 0, Math.PI*2); ctx.fill();
+        // Eye shine
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(187, 76, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(215, 76, 1.5, 0, Math.PI*2); ctx.fill();
+
+        // Eyebrows
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(180, 68); ctx.quadraticCurveTo(186, 65, 192, 68); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(208, 68); ctx.quadraticCurveTo(214, 65, 220, 68); ctx.stroke();
+
+        // Nose & mouth
+        ctx.strokeStyle = skinDark;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(200, 82); ctx.lineTo(198, 90); ctx.stroke();
+        ctx.strokeStyle = '#B8846A';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(192, 98); ctx.quadraticCurveTo(200, 103, 208, 98); ctx.stroke();
+    }
+
+    _drawArm(ctx, shoulder, elbow, wrist, clothColor, skinColor) {
+        // Upper arm (clothed)
+        ctx.beginPath();
+        ctx.moveTo(shoulder[0], shoulder[1]);
+        ctx.lineTo(elbow[0], elbow[1]);
+        ctx.strokeStyle = clothColor;
+        ctx.lineWidth = 18;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Forearm (skin)
+        ctx.beginPath();
+        ctx.moveTo(elbow[0], elbow[1]);
+        ctx.lineTo(wrist[0], wrist[1]);
+        ctx.strokeStyle = skinColor;
+        ctx.lineWidth = 14;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Elbow joint
+        ctx.beginPath();
+        ctx.arc(elbow[0], elbow[1], 8, 0, Math.PI*2);
+        ctx.fillStyle = skinColor;
+        ctx.fill();
+    }
+
+    _drawHand(ctx, pos, shape, skin, skinDark) {
+        const [x, y] = pos;
+        ctx.save();
+
+        if (shape === 'fist') {
+            ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1; ctx.stroke();
+        } else if (shape === 'point') {
+            ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(x, y-9); ctx.lineTo(x, y-22);
+            ctx.stroke();
+        } else if (shape === 'v') {
+            ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(x-4, y-9); ctx.lineTo(x-6, y-22); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x+4, y-9); ctx.lineTo(x+6, y-22); ctx.stroke();
+        } else if (shape === 'pinch') {
+            ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(x, y-8); ctx.lineTo(x, y-16); ctx.stroke();
+            ctx.beginPath(); ctx.arc(x, y-17, 2, 0, Math.PI*2); ctx.fill();
+        } else if (shape === 'cup') {
+            ctx.beginPath();
+            ctx.ellipse(x, y, 11, 8, 0, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1; ctx.stroke();
+        } else if (shape === 'claw') {
+            ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            const offsets = [[-5,-8],[-2,-10],[2,-10],[5,-8]];
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1.5;
+            for (const [ox,oy] of offsets) {
+                ctx.beginPath();ctx.moveTo(x+ox,y+oy);ctx.lineTo(x+ox*1.5,y+oy*1.6);ctx.stroke();
+            }
+        } else if (shape === 'hook') {
+            ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(x, y-9); ctx.quadraticCurveTo(x, y-18, x+6, y-15);
+            ctx.stroke();
+        } else if (shape === 'flat') {
+            ctx.beginPath();
+            ctx.ellipse(x, y-3, 12, 8, 0, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            ctx.strokeStyle = skinDark; ctx.lineWidth = 1; ctx.stroke();
+        } else {
+            // open / relaxed
+            ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI*2);
+            ctx.fillStyle = skin; ctx.fill();
+            if (shape === 'open') {
+                const fingers = [[-5,-9],[-2,-11],[2,-11],[5,-9],[7,-5]];
+                ctx.strokeStyle = skinDark; ctx.lineWidth = 1.3;
+                for (const [ox,oy] of fingers) {
+                    ctx.beginPath();ctx.moveTo(x+ox,y+oy);ctx.lineTo(x+ox*1.6,y+oy*1.5);ctx.stroke();
+                }
+            }
+        }
+        ctx.restore();
+    }
+
+    destroy() { this._animating = false; }
+}
+
+
+/* =========================================================
+   APP LOGIC
+   ========================================================= */
+document.addEventListener('DOMContentLoaded', () => {
+    const canvas   = document.getElementById('avatar-canvas');
+    const signLabel= document.getElementById('sign-label');
+    const glossRow = document.getElementById('gloss-row');
+    const textInput= document.getElementById('text-input');
+    const sendBtn  = document.getElementById('send-btn');
+    const micBtn   = document.getElementById('mic-btn');
+    const statusBar= document.getElementById('status-bar');
+
+    const avatar = new SignAvatar(canvas);
+    let animationTimer = null;
+    let isTranslating = false;
+
+    // ── Translate ──
+    async function translate(text) {
+        if (!text.trim() || isTranslating) return;
+        isTranslating = true;
+        sendBtn.disabled = true;
+        statusBar.textContent = 'Translating...';
+        signLabel.textContent = '⏳';
+        glossRow.innerHTML = '';
+
+        try {
+            const res = await fetch('/api/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            });
+            const data = await res.json();
+            if (data.error) { statusBar.textContent = data.error; return; }
+
+            statusBar.textContent = `"${data.original_text}" → ${data.gloss.length} signs`;
+            renderGlossChips(data.gloss);
+            animateSigns(data.gloss);
+        } catch (e) {
+            statusBar.textContent = 'Error connecting to server';
+            console.error(e);
+        } finally {
+            isTranslating = false;
+            sendBtn.disabled = false;
+        }
+    }
+
+    function renderGlossChips(gloss) {
+        glossRow.innerHTML = '';
+        gloss.forEach((word, i) => {
+            const chip = document.createElement('span');
+            chip.className = 'gloss-chip';
+            chip.textContent = word;
+            chip.id = `chip-${i}`;
+            glossRow.appendChild(chip);
+        });
+    }
+
+    function animateSigns(gloss) {
+        if (animationTimer) clearTimeout(animationTimer);
+        let i = 0;
+        const SIGN_DURATION = 1800;
+
+        function showNext() {
+            if (i >= gloss.length) {
+                signLabel.textContent = '✅ Done';
+                avatar.setPose('_IDLE');
+                // Mark all done
+                document.querySelectorAll('.gloss-chip').forEach(c => c.classList.add('done'));
+                return;
+            }
+            const word = gloss[i];
+            signLabel.textContent = word;
+            avatar.setPose(word);
+
+            // Update chip highlights
+            document.querySelectorAll('.gloss-chip').forEach(c => c.classList.remove('active'));
+            const chip = document.getElementById(`chip-${i}`);
+            if (chip) { chip.classList.add('active'); chip.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+            if (i > 0) {
+                const prev = document.getElementById(`chip-${i-1}`);
+                if (prev) prev.classList.add('done');
+            }
+
+            i++;
+            animationTimer = setTimeout(showNext, SIGN_DURATION);
+        }
+        showNext();
+    }
+
+    // ── Event listeners ──
+    sendBtn.addEventListener('click', () => translate(textInput.value));
+    textInput.addEventListener('keydown', e => { if (e.key === 'Enter') translate(textInput.value); });
+
+    // ── Web Speech API (mic) ──
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        let recognition = null;
+
+        function createRecognition() {
+            const r = new SpeechRecognition();
+            r.lang = 'en-US';
+            r.interimResults = false;
+            r.continuous = false;
+            r.maxAlternatives = 1;
+
+            r.addEventListener('result', e => {
+                const text = e.results[0][0].transcript;
+                const confidence = Math.round(e.results[0][0].confidence * 100);
+                textInput.value = text;
+                statusBar.textContent = `Heard: "${text}" (${confidence}% confidence)`;
+                micBtn.classList.remove('recording');
+                translate(text);
+            });
+
+            r.addEventListener('speechend', () => {
+                statusBar.textContent = 'Processing speech...';
+            });
+
+            r.addEventListener('end', () => {
+                micBtn.classList.remove('recording');
+            });
+
+            r.addEventListener('error', e => {
+                micBtn.classList.remove('recording');
+                const msgs = {
+                    'not-allowed': 'Microphone blocked! Click the lock icon in the address bar and allow microphone access, then try again.',
+                    'no-speech': 'No speech detected. Please speak clearly and try again.',
+                    'audio-capture': 'No microphone found. Please connect a microphone.',
+                    'network': 'Network error. Speech recognition needs internet (Chrome sends audio to Google servers).',
+                    'aborted': 'Listening cancelled.',
+                    'service-not-allowed': 'Speech service not available. Make sure you are using Chrome or Edge browser.',
+                };
+                statusBar.textContent = msgs[e.error] || `Mic error: ${e.error}`;
+                console.error('Speech Recognition Error:', e.error);
+            });
+
+            return r;
+        }
+
+        async function startMic() {
+            // First request microphone permission explicitly
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Permission granted — stop the stream (SpeechRecognition manages its own)
+                stream.getTracks().forEach(t => t.stop());
+            } catch (err) {
+                statusBar.textContent = 'Microphone access denied. Please allow microphone in browser settings.';
+                console.error('getUserMedia error:', err);
+                return;
+            }
+
+            // Create fresh instance each time (avoids stale state bugs)
+            recognition = createRecognition();
+            micBtn.classList.add('recording');
+            statusBar.textContent = 'Listening... speak now!';
+
+            try {
+                recognition.start();
+            } catch (err) {
+                micBtn.classList.remove('recording');
+                statusBar.textContent = 'Could not start microphone: ' + err.message;
+                console.error('recognition.start() error:', err);
+            }
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (micBtn.classList.contains('recording')) {
+                if (recognition) recognition.stop();
+                micBtn.classList.remove('recording');
+                statusBar.textContent = 'Listening stopped.';
+                return;
+            }
+            startMic();
+        });
+    } else {
+        micBtn.disabled = true;
+        micBtn.title = 'Speech recognition not supported — please use Chrome or Edge';
+        statusBar.textContent = 'Voice input requires Chrome or Edge browser.';
+    }
+});
+</script>
+</body>
+</html>
